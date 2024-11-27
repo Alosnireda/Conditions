@@ -39,6 +39,8 @@
 (define-public (set-contract-owner (new-owner principal))
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_UNAUTHORIZED)
+        ;; Add validation for new owner - check if not same as sender
+        (asserts! (not (is-eq new-owner tx-sender)) ERR_INVALID_THRESHOLD)
         (ok (var-set contract-owner new-owner))
     )
 )
@@ -46,6 +48,10 @@
 (define-public (add-authorized-signer (signer principal))
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_UNAUTHORIZED)
+        ;; Add validation for signer
+        (asserts! (not (is-eq signer (var-get contract-owner))) ERR_UNAUTHORIZED)
+        ;; Check if signer is not the same as sender
+        (asserts! (not (is-eq signer tx-sender)) ERR_INVALID_THRESHOLD)
         (ok (map-set authorized-signers signer true))
     )
 )
@@ -53,6 +59,8 @@
 (define-public (set-performance-metrics (metrics uint))
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_UNAUTHORIZED)
+        ;; Add validation for metrics
+        (asserts! (>= metrics u0) ERR_INVALID_THRESHOLD)
         (ok (var-set performance-metrics metrics))
     )
 )
@@ -141,10 +149,9 @@
     amount: uint,
     requires-high-value-check: bool
 })))
-    (match (fold process-single-transfer transfers (ok true))
-        success (ok true)
-        error ERR_TRANSFER_FAILED
-    )
+    (fold process-single-transfer 
+          transfers 
+          (ok true))
 )
 
 (define-private (process-single-transfer
@@ -154,10 +161,9 @@
         requires-high-value-check: bool
     })
     (previous-result (response bool uint)))
-    (match previous-result
-        prev-ok (stx-transfer? (get amount transfer) tx-sender (get recipient transfer))
-        prev-err (err ERR_TRANSFER_FAILED)
-    )
+    (if (is-ok previous-result)
+        (stx-transfer? (get amount transfer) tx-sender (get recipient transfer))
+        previous-result)
 )
 
 ;; Getter functions for transfer records
